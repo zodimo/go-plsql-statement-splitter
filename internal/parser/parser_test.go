@@ -99,8 +99,8 @@ BEGIN
     COMMIT;
 END;
 `,
-			expectedCount:  3, // Should include the PL/SQL block and also the UPDATE and COMMIT inside
-			expectedTypes:  []string{"PLSQL_BLOCK", "UPDATE", "COMMIT"},
+			expectedCount:  1, // With PL/SQL block depth tracking, this is now a single statement
+			expectedTypes:  []string{"PLSQL_BLOCK"},
 			expectedErrors: 0,
 		},
 		{

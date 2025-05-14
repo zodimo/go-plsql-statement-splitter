@@ -350,10 +350,11 @@ type statementModel struct {
 // StatementListener listens for statements in the parse tree
 type StatementListener struct {
 	*gen.BasePlSqlParserListener
-	Statements  []statementModel
-	parser      *gen.PlSqlParser
-	tokenStream *antlr.CommonTokenStream
-	currentType string // Track the current statement type
+	Statements      []statementModel
+	parser          *gen.PlSqlParser
+	tokenStream     *antlr.CommonTokenStream
+	currentType     string // Track the current statement type
+	plsqlBlockDepth int    // Track the nesting level of PL/SQL blocks
 }
 
 // NewStatementListener creates a new statement listener
@@ -364,11 +365,17 @@ func NewStatementListener(parser *gen.PlSqlParser, tokenStream *antlr.CommonToke
 		parser:                  parser,
 		tokenStream:             tokenStream,
 		currentType:             "",
+		plsqlBlockDepth:         0,
 	}
 }
 
 // EnterUnit_statement is called when entering a unit_statement rule
 func (l *StatementListener) EnterUnit_statement(ctx *gen.Unit_statementContext) {
+	// Skip if we are inside a PL/SQL block
+	if l.plsqlBlockDepth > 0 {
+		return
+	}
+
 	// Get the start and stop tokens
 	start := ctx.GetStart()
 	stop := ctx.GetStop()
@@ -402,6 +409,11 @@ func (l *StatementListener) EnterUnit_statement(ctx *gen.Unit_statementContext) 
 
 // EnterSql_statement is called when entering a sql_statement rule
 func (l *StatementListener) EnterSql_statement(ctx *gen.Sql_statementContext) {
+	// Skip if we are inside a PL/SQL block
+	if l.plsqlBlockDepth > 0 {
+		return
+	}
+
 	// Get the start and stop tokens
 	start := ctx.GetStart()
 	stop := ctx.GetStop()
@@ -436,41 +448,91 @@ func (l *StatementListener) EnterSql_statement(ctx *gen.Sql_statementContext) {
 // EnterCreate_procedure_body is called when entering a create_procedure_body rule
 func (l *StatementListener) EnterCreate_procedure_body(ctx *gen.Create_procedure_bodyContext) {
 	l.currentType = "CREATE_PROCEDURE"
+	l.plsqlBlockDepth++
+}
+
+// ExitCreate_procedure_body is called when exiting a create_procedure_body rule
+func (l *StatementListener) ExitCreate_procedure_body(ctx *gen.Create_procedure_bodyContext) {
+	l.plsqlBlockDepth--
 }
 
 // EnterCreate_function_body is called when entering a create_function_body rule
 func (l *StatementListener) EnterCreate_function_body(ctx *gen.Create_function_bodyContext) {
 	l.currentType = "CREATE_FUNCTION"
+	l.plsqlBlockDepth++
+}
+
+// ExitCreate_function_body is called when exiting a create_function_body rule
+func (l *StatementListener) ExitCreate_function_body(ctx *gen.Create_function_bodyContext) {
+	l.plsqlBlockDepth--
 }
 
 // EnterCreate_package is called when entering a create_package rule
 func (l *StatementListener) EnterCreate_package(ctx *gen.Create_packageContext) {
 	l.currentType = "CREATE_PACKAGE"
+	l.plsqlBlockDepth++
+}
+
+// ExitCreate_package is called when exiting a create_package rule
+func (l *StatementListener) ExitCreate_package(ctx *gen.Create_packageContext) {
+	l.plsqlBlockDepth--
 }
 
 // EnterCreate_package_body is called when entering a create_package_body rule
 func (l *StatementListener) EnterCreate_package_body(ctx *gen.Create_package_bodyContext) {
 	l.currentType = "CREATE_PACKAGE_BODY"
+	l.plsqlBlockDepth++
+}
+
+// ExitCreate_package_body is called when exiting a create_package_body rule
+func (l *StatementListener) ExitCreate_package_body(ctx *gen.Create_package_bodyContext) {
+	l.plsqlBlockDepth--
 }
 
 // EnterCreate_trigger is called when entering a create_trigger rule
 func (l *StatementListener) EnterCreate_trigger(ctx *gen.Create_triggerContext) {
 	l.currentType = "CREATE_TRIGGER"
+	l.plsqlBlockDepth++
+}
+
+// ExitCreate_trigger is called when exiting a create_trigger rule
+func (l *StatementListener) ExitCreate_trigger(ctx *gen.Create_triggerContext) {
+	l.plsqlBlockDepth--
 }
 
 // EnterCreate_type is called when entering a create_type rule
 func (l *StatementListener) EnterCreate_type(ctx *gen.Create_typeContext) {
 	l.currentType = "CREATE_TYPE"
+	l.plsqlBlockDepth++
+}
+
+// ExitCreate_type is called when exiting a create_type rule
+func (l *StatementListener) ExitCreate_type(ctx *gen.Create_typeContext) {
+	l.plsqlBlockDepth--
 }
 
 // EnterCreate_type_body is called when the CreateTypeBody rule is encountered
 // Note: Update this if the exact gen.CreateTypeBodyContext name is different
 func (l *StatementListener) EnterCreate_type_body(ctx interface{}) {
 	l.currentType = "CREATE_TYPE_BODY"
+	l.plsqlBlockDepth++
+}
+
+// ExitCreate_type_body is called when exiting a create_type_body rule
+func (l *StatementListener) ExitCreate_type_body(ctx interface{}) {
+	l.plsqlBlockDepth--
 }
 
 // EnterAnonymous_block is called when entering an anonymous_block rule
 func (l *StatementListener) EnterAnonymous_block(ctx *gen.Anonymous_blockContext) {
+	// Increment the block depth counter
+	l.plsqlBlockDepth++
+
+	// Skip adding the statement if it's a nested block
+	if l.plsqlBlockDepth > 1 {
+		return
+	}
+
 	// Get the start and stop tokens
 	start := ctx.GetStart()
 	stop := ctx.GetStop()
@@ -499,8 +561,19 @@ func (l *StatementListener) EnterAnonymous_block(ctx *gen.Anonymous_blockContext
 	})
 }
 
+// ExitAnonymous_block is called when exiting an anonymous_block rule
+func (l *StatementListener) ExitAnonymous_block(ctx *gen.Anonymous_blockContext) {
+	// Decrement the block depth counter
+	l.plsqlBlockDepth--
+}
+
 // EnterTransaction_control_statements is called when entering a transaction_control_statements rule
 func (l *StatementListener) EnterTransaction_control_statements(ctx *gen.Transaction_control_statementsContext) {
+	// Skip if we are inside a PL/SQL block
+	if l.plsqlBlockDepth > 0 {
+		return
+	}
+
 	// Get the start and stop tokens
 	start := ctx.GetStart()
 	stop := ctx.GetStop()
@@ -538,6 +611,16 @@ func (l *StatementListener) EnterTransaction_control_statements(ctx *gen.Transac
 		EndColumn:   endColumn,
 		Type:        stmtType,
 	})
+}
+
+// EnterBlock is called when entering a block statement rule
+func (l *StatementListener) EnterBlock(ctx *gen.BlockContext) {
+	l.plsqlBlockDepth++
+}
+
+// ExitBlock is called when exiting a block statement rule
+func (l *StatementListener) ExitBlock(ctx *gen.BlockContext) {
+	l.plsqlBlockDepth--
 }
 
 // getDeterminedStatementType identifies the type of SQL statement
