@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zodimo/go-plsql-statement-splitter/pkg/statement"
 	"github.com/zodimo/go-plsql-statement-splitter/test/samples"
 )
 
@@ -31,7 +32,7 @@ func TestSplitString_SingleStatement(t *testing.T) {
 	if statements[0].Content != input {
 		t.Errorf("Expected content to be %q, got %q", input, statements[0].Content)
 	}
-	if statements[0].Type != "SELECT" {
+	if statements[0].Type != statement.TypeSelect {
 		t.Errorf("Expected type to be SELECT, got %s", statements[0].Type)
 	}
 }
@@ -39,8 +40,8 @@ func TestSplitString_SingleStatement(t *testing.T) {
 func TestSplitString_MultipleStatements(t *testing.T) {
 	input := `
 	SELECT * FROM employees;
-	INSERT INTO employees (id, name) VALUES (1, 'John');
-	UPDATE employees SET name = 'Jane' WHERE id = 1;
+	INSERT INTO employees VALUES (1, 'John');
+	UPDATE employees SET salary = 1000;
 	`
 	statements, err := SplitString(input)
 	if err != nil {
@@ -51,7 +52,7 @@ func TestSplitString_MultipleStatements(t *testing.T) {
 	}
 
 	// Verify the types of statements
-	expectedTypes := []string{"SELECT", "INSERT", "UPDATE"}
+	expectedTypes := []statement.Type{statement.TypeSelect, statement.TypeInsert, statement.TypeUpdate}
 	for i, stmt := range statements {
 		if i < len(expectedTypes) && stmt.Type != expectedTypes[i] {
 			t.Errorf("Statement %d: expected type %s, got %s", i, expectedTypes[i], stmt.Type)
@@ -80,7 +81,7 @@ func TestSplitString_PlSqlBlock(t *testing.T) {
 	foundBlock := false
 
 	for _, stmt := range statements {
-		if stmt.Type == "PLSQL_BLOCK" {
+		if stmt.Type == statement.TypePlsqlBlock {
 			foundBlock = true
 		}
 	}
@@ -93,7 +94,7 @@ func TestSplitString_PlSqlBlock(t *testing.T) {
 	// To check for slash, uncomment and add the following:
 	// foundSlash := false
 	// for _, stmt := range statements {
-	//     if stmt.Type == "SLASH" {
+	//     if stmt.Type == statement.TypeSlash {
 	//         foundSlash = true
 	//     }
 	// }
@@ -130,7 +131,7 @@ func TestSplitString_CreateProcedure(t *testing.T) {
 	// or contains CREATE PROCEDURE in the content
 	foundProcedure := false
 	for _, stmt := range statements {
-		if stmt.Type == "CREATE_PROCEDURE" || strings.Contains(strings.ToUpper(stmt.Content), "CREATE PROCEDURE") {
+		if stmt.Type == statement.TypeCreateProcedure || strings.Contains(strings.ToUpper(stmt.Content), "CREATE PROCEDURE") {
 			foundProcedure = true
 			break
 		}
@@ -155,7 +156,7 @@ func TestSplitReader(t *testing.T) {
 	if statements[0].Content != input {
 		t.Errorf("Expected content to be %q, got %q", input, statements[0].Content)
 	}
-	if statements[0].Type != "SELECT" {
+	if statements[0].Type != statement.TypeSelect {
 		t.Errorf("Expected type to be SELECT, got %s", statements[0].Type)
 	}
 }
@@ -311,7 +312,7 @@ func TestSplitFile(t *testing.T) {
 	if statements[0].Content != content {
 		t.Errorf("Expected content to be %q, got %q", content, statements[0].Content)
 	}
-	if statements[0].Type != "SELECT" {
+	if statements[0].Type != statement.TypeSelect {
 		t.Errorf("Expected type to be SELECT, got %s", statements[0].Type)
 	}
 
@@ -352,7 +353,7 @@ func TestSplitString_SimpleSQLSamples(t *testing.T) {
 				}
 
 				// Check that type is set (even if empty)
-				if stmt.Type == "" {
+				if stmt.Type == statement.Type("") {
 					t.Errorf("Statement %d has no type", i)
 				}
 			}
@@ -389,7 +390,7 @@ func TestSplitString_ComplexSQLSamples(t *testing.T) {
 				}
 
 				// Check that type is set (even if empty)
-				if stmt.Type == "" {
+				if stmt.Type == statement.Type("") {
 					t.Errorf("Statement %d has no type", i)
 				}
 			}

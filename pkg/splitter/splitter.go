@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	internalParser "github.com/zodimo/go-plsql-statement-splitter/internal/parser"
+	"github.com/zodimo/go-plsql-statement-splitter/pkg/statement"
 )
 
 // Splitter is responsible for splitting PL/SQL scripts into individual statements
@@ -203,7 +204,7 @@ func (s *Splitter) SplitString(content string) ([]Statement, error) {
 	for _, stmt := range parsedStatements {
 		statement := Statement{
 			Content: stmt.Content,
-			Type:    stmt.Type,
+			Type:    statement.Parse(stmt.Type),
 		}
 
 		// Include position information if configured
