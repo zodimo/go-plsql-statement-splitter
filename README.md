@@ -306,18 +306,39 @@ The library can identify the following statement types:
 
 ### Testing
 
-The library includes comprehensive tests:
+The project has a comprehensive testing workflow to ensure code quality:
 
 ```bash
-# Run all tests
+# Run the test script with all checks
+./scripts/test.sh -a
+
+# Run basic tests
 go test ./...
 
-# Run tests for a specific package
-go test ./pkg/splitter
+# Run tests with race detector
+go test -race ./...
 
 # Run tests with coverage
 go test -cover ./...
 ```
+
+For more details about testing, see [docs/testing.md](docs/testing.md).
+
+#### Continuous Integration
+
+This project uses GitHub Actions for continuous integration:
+
+- **Test workflow**: Runs tests and linting on push and pull requests
+- **Coverage workflow**: Generates and uploads code coverage reports 
+- **Security scanning**: Checks for security issues in the code and dependencies
+
+#### Contributing Tests
+
+When adding new features or fixing bugs, please include appropriate tests:
+
+- Add unit tests for new functionality
+- Ensure existing tests continue to pass
+- Consider adding benchmark tests for performance-critical code
 
 ## Future Enhancements
 
