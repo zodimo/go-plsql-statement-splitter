@@ -1,0 +1,57 @@
+name: Go Lint (DISABLED)
+
+# This workflow is currently disabled until further notice
+
+on:
+  # Disable triggers by commenting them out
+  # push:
+  #   branches: [ master ]
+  # pull_request:
+  #   branches: [ master ]
+  
+  # Only run manually
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual run'
+        required: true
+        default: 'Testing disabled linting workflow'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.24.x
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Install golangci-lint
+      run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.0
+
+    - name: Create golangci-lint config
+      run: |
+        cat > .golangci.yml << EOL
+        run:
+          timeout: 5m
+          tests: true
+          skip-dirs:
+            - internal/parser/gen
+          
+        linters:
+          disable-all: true
+          enable:
+            - errcheck
+            - gosimple
+            - govet
+            - ineffassign
+            - staticcheck
+            - unused
+EOL
+
+    - name: Run golangci-lint
+      run: $(go env GOPATH)/bin/golangci-lint run -v 
