@@ -3,7 +3,9 @@
 A Go library for accurately splitting Oracle PL/SQL scripts into individual statements with precise boundary detection using ANTLR4 for parsing.
 
 # DISCLAIMER
-This project was created with the help of an ai coding assistent.
+This project was created with the help of AI assistance:
+- Development performed using [Cursor IDE](https://cursor.com), an AI-powered code editor
+- Project structure and development methodology based on the [VAN Memory Bank](https://github.com/vanzan01/cursor-memory-bank) framework
 
 ## Overview
 
@@ -325,3 +327,68 @@ Planned enhancements for future releases:
 - Enhanced error recovery for incomplete statements
 - Support for additional Oracle-specific syntax
 - Performance optimizations for large scripts
+
+### Advanced Error Handling
+
+The library provides detailed error reporting capabilities to help diagnose and fix syntax errors:
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    
+    "github.com/zodimo/go-plsql-statement-splitter/pkg/splitter"
+)
+
+func main() {
+    // Create a splitter with enhanced error reporting
+    s := splitter.NewSplitter(
+        splitter.WithVerboseErrors(true),         // Include detailed error messages
+        splitter.WithMaxErrors(5),                // Maximum number of errors to report
+        splitter.WithErrorContext(true),          // Include error context
+        splitter.WithErrorContextLines(5),        // Show 5 lines before and after each error
+        splitter.WithErrorStatement(true),        // Include statement causing error
+    )
+    
+    // Try to split statements and handle errors
+    _, err := s.SplitFile("path/to/script.sql")
+    if err != nil {
+        syntaxErr, isSyntaxErr := err.(*splitter.SyntaxError)
+        if isSyntaxErr {
+            // This will print the error with context showing 5 lines before and after
+            fmt.Printf("Syntax error detected:\n%s\n", syntaxErr.Error())
+        } else {
+            log.Fatalf("Error: %v", err)
+        }
+    }
+}
+```
+
+An example of the enhanced error output:
+
+```
+Syntax error at line 42, column 10: mismatched input 'END' expecting {';', ','}
+40 |     FOR emp IN (SELECT * FROM employees) LOOP
+41 |         DBMS_OUTPUT.PUT_LINE('Employee: ' || emp.name)
+42 |     END LOOP
+           ^
+43 | END;
+44 | /
+```
+
+The error output includes:
+- Error message with line and column number
+- Context showing several lines before and after the error
+- A marker (^) pointing precisely to the error position
+
+## Acknowledgements
+
+### Development Tools
+
+- [Cursor](https://cursor.com) - An advanced IDE powered by AI that was used for the development of this project.
+
+### Development Methodology
+
+This project utilizes the structured memory bank system developed by [vanzan01 - cursor-memory-bank](https://github.com/vanzan01/cursor-memory-bank), which provides an organized framework for AI-assisted software development.

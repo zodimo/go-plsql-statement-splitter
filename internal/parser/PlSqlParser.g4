@@ -5467,7 +5467,7 @@ primary_key_clause
 // Anonymous PL/SQL code block
 
 anonymous_block
-    : (DECLARE seq_of_declare_specs)? BEGIN seq_of_statements (EXCEPTION exception_handler+)? END SEMICOLON
+    : (DECLARE seq_of_declare_specs)? BEGIN seq_of_statements (EXCEPTION exception_handler+)? END (SEMICOLON)?
     ;
 
 // Common DDL Clauses
@@ -5591,7 +5591,11 @@ varray_type_def
 // Statements
 
 seq_of_statements
-    : (statement (';' | EOF) | label_declaration)+
+    : (statement (';' | EOF) | label_declaration | declare_block)+
+    ;
+
+declare_block
+    : DECLARE seq_of_declare_specs? BEGIN seq_of_statements (EXCEPTION exception_handler+)? END (';')?
     ;
 
 label_declaration

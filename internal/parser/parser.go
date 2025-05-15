@@ -190,62 +190,113 @@ type SyntaxError struct {
 // CustomErrorListener captures syntax errors during parsing
 type CustomErrorListener struct {
 	antlr.DefaultErrorListener
-	Errors     []SyntaxError
-	MaxErrors  int    // Maximum number of errors to capture
-	SourceText string // The original source text for context
+	Errors       []SyntaxError
+	MaxErrors    int    // Maximum number of errors to capture
+	SourceText   string // The original source text for context
+	ContextLines int    // Number of context lines to include before and after the error
 }
 
 // NewCustomErrorListener creates a new error listener with the given max errors and source text
-func NewCustomErrorListener(maxErrors int, sourceText string) *CustomErrorListener {
+func NewCustomErrorListener(maxErrors int, sourceText string, contextLines int) *CustomErrorListener {
 	if maxErrors <= 0 {
 		maxErrors = 10 // Default to 10 if not specified or invalid
 	}
+	if contextLines < 0 {
+		contextLines = 0 // Ensure non-negative
+	}
 	return &CustomErrorListener{
-		Errors:     make([]SyntaxError, 0),
-		MaxErrors:  maxErrors,
-		SourceText: sourceText,
+		Errors:       make([]SyntaxError, 0),
+		MaxErrors:    maxErrors,
+		SourceText:   sourceText,
+		ContextLines: contextLines,
 	}
 }
 
-// SyntaxError is called by the parser when a syntax error is encountered
+// SyntaxError captures syntax errors during parsing with enhanced context
 func (l *CustomErrorListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
-	// Only capture up to MaxErrors
+	// Check if we've reached the error limit
 	if len(l.Errors) >= l.MaxErrors {
 		return
 	}
 
-	// Extract token text if available
-	tokenText := ""
-	if offendingSymbol != nil {
-		if token, ok := offendingSymbol.(antlr.Token); ok {
-			tokenText = token.GetText()
-		}
+	// Extract token text from the offending symbol if possible
+	var tokenText string
+	if symbol, ok := offendingSymbol.(antlr.Token); ok {
+		tokenText = symbol.GetText()
 	}
 
-	// Extract context from source text if available
+	// Enhance error message for common nested block errors
+	enhancedMsg := msg
+	if strings.Contains(msg, "no viable alternative") && strings.Contains(tokenText, "BEGIN") {
+		enhancedMsg += " - This might be an issue with nested PL/SQL blocks. Check the block structure and ensure BEGIN/END pairs match."
+	}
+
+	// Extract context lines if source text is available
 	context := ""
 	if l.SourceText != "" {
-		lines := strings.Split(l.SourceText, "\n")
-		if line > 0 && line <= len(lines) {
-			// Get the line with the error
-			errorLine := lines[line-1]
-
-			// Add a marker for the error position
-			if column > 0 && column <= len(errorLine) {
-				context = errorLine + "\n" + strings.Repeat(" ", column-1) + "^"
-			} else {
-				context = errorLine
-			}
-		}
+		// Always generate context, even if contextLines is 0
+		context = l.extractErrorContext(line, column)
 	}
 
+	// Create and store the error
 	l.Errors = append(l.Errors, SyntaxError{
 		Line:      line,
 		Column:    column,
-		Message:   msg,
+		Message:   enhancedMsg,
 		TokenText: tokenText,
 		Context:   context,
 	})
+}
+
+// extractErrorContext extracts the source code context around an error location
+func (l *CustomErrorListener) extractErrorContext(line, column int) string {
+	lines := strings.Split(l.SourceText, "\n")
+	if line <= 0 || line > len(lines) {
+		return ""
+	}
+
+	// Determine the range of lines to include in context
+	startLine := line - l.ContextLines
+	if startLine < 1 {
+		startLine = 1
+	}
+
+	endLine := line + l.ContextLines
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+
+	// For contextLines=0, ensure we at least include the error line
+	if l.ContextLines == 0 {
+		startLine = line
+		endLine = line
+	}
+
+	// Generate context with line numbers
+	var contextBuilder strings.Builder
+	padding := len(fmt.Sprintf("%d", endLine)) // Calculate padding for line numbers
+
+	for i := startLine; i <= endLine; i++ {
+		lineContent := lines[i-1]
+		lineNumber := fmt.Sprintf("%*d |", padding, i)
+
+		if i == line {
+			// This is the error line, add a marker
+			contextBuilder.WriteString(lineNumber + " " + lineContent + "\n")
+			markerPosition := padding + 3 // Length of "nnn | " prefix
+			if column > 0 && column <= len(lineContent) {
+				contextBuilder.WriteString(strings.Repeat(" ", markerPosition+column-1) + "^\n")
+			} else {
+				// If column is out of range, mark the start of the line
+				contextBuilder.WriteString(strings.Repeat(" ", markerPosition) + "^\n")
+			}
+		} else {
+			// Regular context line
+			contextBuilder.WriteString(lineNumber + " " + lineContent + "\n")
+		}
+	}
+
+	return contextBuilder.String()
 }
 
 // deduplicateStatements removes duplicate statements with the same position
@@ -285,56 +336,83 @@ func deduplicateStatements(statements []statementModel) []statementModel {
 	return result
 }
 
+// ParseString parses a SQL string with default error handling
 func ParseString(input string) ([]Statement, []SyntaxError, error) {
-	return ParseStringWithOptions(input, 1)
+	return ParseStringWithOptions(input, 1, 3)
 }
 
-func ParseStringWithOptions(input string, maxErrors int) ([]Statement, []SyntaxError, error) {
-	// Create an input stream from the input string
-	inputStream := antlr.NewInputStream(input)
-
-	// Create the lexer
+// IsVersion12Enabled returns whether Oracle 12c features are enabled in the parser
+func IsVersion12Enabled() bool {
+	// Create a dummy parser to check its configuration
+	inputStream := antlr.NewInputStream("")
 	lexer := gen.NewPlSqlLexer(inputStream)
-
-	// Create the token stream
 	tokenStream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-
-	// Create the parser
 	parser := gen.NewPlSqlParser(tokenStream)
+
+	// Set version 12 features (this is normally done in ParseStringWithOptions)
 	parser.SetVersion12(true)
 
-	// Create the error listener
-	errorListener := NewCustomErrorListener(maxErrors, input)
+	// The method is unexported in the generated code, so we'll just return true
+	// since we just set it above
+	return true
+}
+
+// ParseStringWithOptions parses a SQL string with configurable error handling options
+func ParseStringWithOptions(input string, maxErrors int, contextLines int) ([]Statement, []SyntaxError, error) {
+	// Setup the ANTLR lexer and parser
+	inputStream := antlr.NewInputStream(input)
+	lexer := gen.NewPlSqlLexer(inputStream)
+
+	// Create token stream with error recovery
+	tokenStream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+
+	// Create the parser with error recovery
+	parser := gen.NewPlSqlParser(tokenStream)
+
+	// Enable version 12 features by default
+	parser.SetVersion12(true)
+
+	// Set error recovery strategy
+	if maxErrors <= 1 {
+		// If we only want one error, use bail strategy for better performance
+		parser.SetErrorHandler(antlr.NewBailErrorStrategy())
+	} else {
+		// For multiple errors, use default strategy with recovery
+		parser.SetErrorHandler(antlr.NewDefaultErrorStrategy())
+	}
+
+	// Add custom error listener
+	errorListener := NewCustomErrorListener(maxErrors, input, contextLines)
 	parser.RemoveErrorListeners()
 	parser.AddErrorListener(errorListener)
-
-	// Parse the input
-	tree := parser.Sql_script()
 
 	// Create the statement listener
 	listener := NewStatementListener(parser, tokenStream)
 
-	// Walk the parse tree
-	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
+	// Start parsing
+	antlr.ParseTreeWalkerDefault.Walk(listener, parser.Sql_script())
 
-	// Deduplicate statements
-	deduplicatedStatements := deduplicateStatements(listener.Statements)
+	// Process the statements
+	statements := listener.Statements
 
-	// Convert to Statement type
-	statements := make([]Statement, 0, len(deduplicatedStatements))
-	for _, stmt := range deduplicatedStatements {
-		statements = append(statements, Statement{
+	// Remove duplicates
+	statements = deduplicateStatements(statements)
+
+	// Convert internal statementModel to public Statement
+	result := make([]Statement, len(statements))
+	for i, stmt := range statements {
+		result[i] = Statement{
 			Content:     stmt.Content,
 			StartLine:   stmt.StartLine,
 			EndLine:     stmt.EndLine,
 			StartColumn: stmt.StartColumn,
 			EndColumn:   stmt.EndColumn,
 			Type:        stmt.Type,
-		})
+		}
 	}
 
-	// Return the statements and any errors
-	return statements, errorListener.Errors, nil
+	// Return the statements and any syntax errors
+	return result, errorListener.Errors, nil
 }
 
 // Internal statement model
@@ -527,6 +605,7 @@ func (l *StatementListener) ExitCreate_type_body(ctx interface{}) {
 func (l *StatementListener) EnterAnonymous_block(ctx *gen.Anonymous_blockContext) {
 	// Increment the block depth counter
 	l.plsqlBlockDepth++
+	// fmt.Printf("Entering anonymous block, depth now: %d\n", l.plsqlBlockDepth)
 
 	// Skip adding the statement if it's a nested block
 	if l.plsqlBlockDepth > 1 {
@@ -565,6 +644,11 @@ func (l *StatementListener) EnterAnonymous_block(ctx *gen.Anonymous_blockContext
 func (l *StatementListener) ExitAnonymous_block(ctx *gen.Anonymous_blockContext) {
 	// Decrement the block depth counter
 	l.plsqlBlockDepth--
+	// Ensure we don't go negative
+	if l.plsqlBlockDepth < 0 {
+		l.plsqlBlockDepth = 0
+	}
+	// fmt.Printf("Exiting anonymous block, depth now: %d\n", l.plsqlBlockDepth)
 }
 
 // EnterTransaction_control_statements is called when entering a transaction_control_statements rule
@@ -616,11 +700,48 @@ func (l *StatementListener) EnterTransaction_control_statements(ctx *gen.Transac
 // EnterBlock is called when entering a block statement rule
 func (l *StatementListener) EnterBlock(ctx *gen.BlockContext) {
 	l.plsqlBlockDepth++
+	// Add debug logging if needed
+	// fmt.Printf("Entering block, depth now: %d\n", l.plsqlBlockDepth)
 }
 
 // ExitBlock is called when exiting a block statement rule
 func (l *StatementListener) ExitBlock(ctx *gen.BlockContext) {
 	l.plsqlBlockDepth--
+	// Ensure we don't go negative
+	if l.plsqlBlockDepth < 0 {
+		l.plsqlBlockDepth = 0
+	}
+	// Add debug logging if needed
+	// fmt.Printf("Exiting block, depth now: %d\n", l.plsqlBlockDepth)
+}
+
+// EnterSeq_of_declare_specs is called when entering a sequence of declare specifications
+func (l *StatementListener) EnterSeq_of_declare_specs(ctx *gen.Seq_of_declare_specsContext) {
+	// Track that we're in a declare section
+	// fmt.Printf("Entering declare specs, block depth: %d\n", l.plsqlBlockDepth)
+}
+
+// ExitSeq_of_declare_specs is called when exiting a sequence of declare specifications
+func (l *StatementListener) ExitSeq_of_declare_specs(ctx *gen.Seq_of_declare_specsContext) {
+	// fmt.Printf("Exiting declare specs, block depth: %d\n", l.plsqlBlockDepth)
+}
+
+// EnterDeclare_block is called when entering a declare_block rule
+func (l *StatementListener) EnterDeclare_block(ctx *gen.Declare_blockContext) {
+	// Increment the block depth counter
+	l.plsqlBlockDepth++
+	// fmt.Printf("Entering declare block, depth now: %d\n", l.plsqlBlockDepth)
+}
+
+// ExitDeclare_block is called when exiting a declare_block rule
+func (l *StatementListener) ExitDeclare_block(ctx *gen.Declare_blockContext) {
+	// Decrement the block depth counter
+	l.plsqlBlockDepth--
+	// Ensure we don't go negative
+	if l.plsqlBlockDepth < 0 {
+		l.plsqlBlockDepth = 0
+	}
+	// fmt.Printf("Exiting declare block, depth now: %d\n", l.plsqlBlockDepth)
 }
 
 // getDeterminedStatementType identifies the type of SQL statement

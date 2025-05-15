@@ -3599,6 +3599,10 @@ func (v *BasePlSqlParserVisitor) VisitSeq_of_statements(ctx *Seq_of_statementsCo
 	return v.VisitChildren(ctx)
 }
 
+func (v *BasePlSqlParserVisitor) VisitDeclare_block(ctx *Declare_blockContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BasePlSqlParserVisitor) VisitLabel_declaration(ctx *Label_declarationContext) interface{} {
 	return v.VisitChildren(ctx)
 }

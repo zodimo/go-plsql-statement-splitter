@@ -10,10 +10,11 @@ type Statement struct {
 	Type        string `json:"type,omitempty"` // If available from ANTLR parser
 }
 
-// SyntaxError represents a syntax error that occurred during parsing
+// SyntaxError represents a syntax error in a PL/SQL script
 type SyntaxError struct {
-	Message   string `json:"message"`
-	Line      int    `json:"line"`
-	Column    int    `json:"column"`
-	Statement string `json:"statement,omitempty"`
+	Line      int    `json:"line"`      // Line number where the error occurred
+	Column    int    `json:"column"`    // Column number where the error occurred
+	Message   string `json:"message"`   // Error message
+	Statement string `json:"statement"` // The statement that caused the error
+	Context   string `json:"context"`   // Context lines showing the error in context
 }

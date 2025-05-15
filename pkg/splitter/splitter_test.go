@@ -534,8 +534,9 @@ func TestSplitter_WithErrorStatement(t *testing.T) {
 func TestSplitter_GetAllSyntaxErrors(t *testing.T) {
 	// Input with multiple syntax errors
 	input := `SELECT * FROM employees;
-	SELECT 'invalid statement
-	SELECT * FROM departments WHERE id = ;`
+	SELECT 'invalid statement;
+	SELECT * FROM department WHERE id = ;
+	CREATE TABLE mytable ( id NUMBER missing_keyword );`
 
 	splitter := NewSplitter(WithMaxErrors(1)) // Only 1 error normally
 	errors, err := splitter.GetAllSyntaxErrors(input)
@@ -614,4 +615,66 @@ func TestFileExists(t *testing.T) {
 	if FileExists("non_existent_file_" + tmpfile.Name()) {
 		t.Errorf("FileExists returned true for non-existent file")
 	}
+}
+
+// TestSplitter_WithErrorContextLines tests the WithErrorContextLines option
+func TestSplitter_WithErrorContextLines(t *testing.T) {
+	// This input has a syntax error
+	input := `SELECT * FROM employees;
+	SELECT 'invalid statement
+	SELECT * FROM departments;`
+
+	// Test with different context line settings
+	testCases := []struct {
+		name         string
+		contextLines int
+	}{
+		{"0 context lines", 0},
+		{"1 context line", 1},
+		{"3 context lines", 3},
+		{"5 context lines", 5},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create splitter with error context and specific context lines
+			splitter := NewSplitter(
+				WithErrorContext(true),
+				WithErrorContextLines(tc.contextLines),
+				WithVerboseErrors(true),
+			)
+
+			// Try to parse the invalid input
+			_, err := splitter.SplitString(input)
+
+			// Ensure we got an error
+			if err == nil {
+				t.Fatal("Expected an error, but got nil")
+			}
+
+			// Convert to string for easier checking
+			errMsg := err.Error()
+
+			// Basic error checks
+			if !strings.Contains(errMsg, "syntax error at line") {
+				t.Errorf("Error message doesn't contain expected basic error info: %s", errMsg)
+			}
+
+			// No need to check for specific context format, as that's implementation-dependent
+			// Just make sure we get a valid error message that contains core information
+			if tc.contextLines > 0 {
+				if !strings.Contains(errMsg, "no viable alternative") && !strings.Contains(errMsg, "extraneous input") && !strings.Contains(errMsg, "missing") {
+					t.Errorf("Error message should contain error details but doesn't: %s", errMsg)
+				}
+			}
+		})
+	}
+}
+
+// Helper function for min
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

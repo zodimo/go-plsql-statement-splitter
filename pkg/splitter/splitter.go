@@ -18,6 +18,7 @@ type Splitter struct {
 	maxErrors             int
 	includeContext        bool
 	includeErrorStatement bool
+	contextLines          int // Number of context lines to show before and after the error
 }
 
 // NewSplitter creates a new Splitter instance with the provided options
@@ -28,6 +29,7 @@ func NewSplitter(options ...Option) *Splitter {
 		maxErrors:             1,
 		includeContext:        false,
 		includeErrorStatement: false,
+		contextLines:          3, // Default to 3 lines of context before and after
 	}
 
 	// Apply options
@@ -76,6 +78,15 @@ func WithErrorStatement(include bool) Option {
 	}
 }
 
+// WithErrorContextLines configures the number of context lines to include before and after errors
+func WithErrorContextLines(lines int) Option {
+	return func(s *Splitter) {
+		if lines >= 0 {
+			s.contextLines = lines
+		}
+	}
+}
+
 // SplitFile splits a PL/SQL script file into individual statements
 func SplitFile(filePath string) ([]Statement, error) {
 	splitter := NewSplitter()
@@ -121,7 +132,7 @@ func (s *Splitter) SplitString(content string) ([]Statement, error) {
 	}
 
 	// Use the ANTLR4 parser to parse the SQL
-	parsedStatements, syntaxErrors, err := internalParser.ParseStringWithOptions(content, s.maxErrors)
+	parsedStatements, syntaxErrors, err := internalParser.ParseStringWithOptions(content, s.maxErrors, s.contextLines)
 	if err != nil {
 		return nil, fmt.Errorf("parser error: %w", err)
 	}
@@ -157,6 +168,7 @@ func (s *Splitter) SplitString(content string) ([]Statement, error) {
 				Message: strings.Join(errorMessages, "\n"),
 				Line:    syntaxErrors[0].Line,
 				Column:  syntaxErrors[0].Column,
+				Context: syntaxErrors[0].Context,
 			}
 
 			// Include statement content if configured and available
@@ -174,6 +186,7 @@ func (s *Splitter) SplitString(content string) ([]Statement, error) {
 				Message: firstError.Message,
 				Line:    firstError.Line,
 				Column:  firstError.Column,
+				Context: firstError.Context,
 			}
 
 			// Include statement content if configured and available
@@ -215,8 +228,22 @@ var (
 	ErrParsing    = errors.New("error parsing SQL")
 )
 
-// Error returns a string representation of a SyntaxError
+// Error implements the error interface for SyntaxError
 func (e *SyntaxError) Error() string {
+	if e.Context != "" {
+		return fmt.Sprintf("syntax error at line %d, column %d: %s\n%s", e.Line, e.Column, e.Message, e.Context)
+	}
+
+	// Handle case where error message is too verbose (containing the full token list)
+	if strings.Contains(e.Message, "expecting {") && len(e.Message) > 200 {
+		// Extract just the first part of the message before the token list
+		parts := strings.SplitN(e.Message, "expecting {", 2)
+		if len(parts) == 2 {
+			return fmt.Sprintf("syntax error at line %d, column %d: %s expecting {...}",
+				e.Line, e.Column, strings.TrimSpace(parts[0]))
+		}
+	}
+
 	return fmt.Sprintf("syntax error at line %d, column %d: %s", e.Line, e.Column, e.Message)
 }
 
@@ -227,7 +254,7 @@ func (s *Splitter) GetSyntaxErrors(content string) ([]SyntaxError, error) {
 	}
 
 	// Use the ANTLR4 parser to parse the SQL
-	_, syntaxErrors, err := internalParser.ParseStringWithOptions(content, s.maxErrors)
+	_, syntaxErrors, err := internalParser.ParseStringWithOptions(content, s.maxErrors, s.contextLines)
 	if err != nil {
 		return nil, fmt.Errorf("parser error: %w", err)
 	}
@@ -239,6 +266,7 @@ func (s *Splitter) GetSyntaxErrors(content string) ([]SyntaxError, error) {
 			Message: err.Message,
 			Line:    err.Line,
 			Column:  err.Column,
+			Context: err.Context,
 		}
 
 		// Include statement content if configured and available
@@ -256,9 +284,10 @@ func (s *Splitter) GetSyntaxErrors(content string) ([]SyntaxError, error) {
 func (s *Splitter) GetAllSyntaxErrors(content string) ([]SyntaxError, error) {
 	// Create a temporary splitter with unlimited errors
 	tempSplitter := NewSplitter(
-		WithMaxErrors(0), // 0 means unlimited
+		WithMaxErrors(9999), // Use a large number to effectively make it unlimited
 		WithErrorStatement(s.includeErrorStatement),
 		WithErrorContext(s.includeContext),
+		WithErrorContextLines(s.contextLines),
 	)
 
 	return tempSplitter.GetSyntaxErrors(content)

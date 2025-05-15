@@ -2701,6 +2701,9 @@ type PlSqlParserVisitor interface {
 	// Visit a parse tree produced by PlSqlParser#seq_of_statements.
 	VisitSeq_of_statements(ctx *Seq_of_statementsContext) interface{}
 
+	// Visit a parse tree produced by PlSqlParser#declare_block.
+	VisitDeclare_block(ctx *Declare_blockContext) interface{}
+
 	// Visit a parse tree produced by PlSqlParser#label_declaration.
 	VisitLabel_declaration(ctx *Label_declarationContext) interface{}
 

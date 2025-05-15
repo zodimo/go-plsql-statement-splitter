@@ -26,6 +26,7 @@ func main() {
 		allErrors           bool
 		jsonPretty          bool
 		jsonIndent          string
+		contextLines        int
 	)
 
 	flag.StringVar(&outputFormat, "format", "text", "Output format: text or json")
@@ -40,6 +41,7 @@ func main() {
 	flag.BoolVar(&allErrors, "all-errors", false, "Show all errors, ignoring max-errors setting")
 	flag.BoolVar(&jsonPretty, "pretty", true, "Pretty print JSON output")
 	flag.StringVar(&jsonIndent, "indent", "  ", "Indentation for JSON output")
+	flag.IntVar(&contextLines, "context-lines", 3, "Number of context lines to show before and after errors")
 	flag.Parse()
 
 	// Check if a file path was provided
@@ -55,7 +57,7 @@ func main() {
 		fmt.Println("  splitter -format=json script.sql")
 		fmt.Println("  splitter -format=json -output=result.json script.sql")
 		fmt.Println("  splitter -verbose-errors script.sql")
-		fmt.Println("  splitter -all-errors -error-context invalid.sql")
+		fmt.Println("  splitter -all-errors -error-context -context-lines=5 invalid.sql")
 
 		fmt.Println("\nRunning demo...")
 		demoSplitString()
@@ -77,6 +79,7 @@ func main() {
 	}
 	if includeErrorContext {
 		splitterOpts = append(splitterOpts, splitter.WithErrorContext(true))
+		splitterOpts = append(splitterOpts, splitter.WithErrorContextLines(contextLines))
 	}
 	if includeErrorStmt {
 		splitterOpts = append(splitterOpts, splitter.WithErrorStatement(true))
@@ -234,6 +237,7 @@ INSERT INTO employees (id, name) VALUES (1, 'John);
 	s := splitter.NewSplitter(
 		splitter.WithVerboseErrors(true),
 		splitter.WithErrorContext(true),
+		splitter.WithErrorContextLines(5),
 		splitter.WithMaxErrors(5),
 	)
 

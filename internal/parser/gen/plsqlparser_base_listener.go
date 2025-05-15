@@ -5738,6 +5738,12 @@ func (s *BasePlSqlParserListener) EnterSeq_of_statements(ctx *Seq_of_statementsC
 // ExitSeq_of_statements is called when production seq_of_statements is exited.
 func (s *BasePlSqlParserListener) ExitSeq_of_statements(ctx *Seq_of_statementsContext) {}
 
+// EnterDeclare_block is called when production declare_block is entered.
+func (s *BasePlSqlParserListener) EnterDeclare_block(ctx *Declare_blockContext) {}
+
+// ExitDeclare_block is called when production declare_block is exited.
+func (s *BasePlSqlParserListener) ExitDeclare_block(ctx *Declare_blockContext) {}
+
 // EnterLabel_declaration is called when production label_declaration is entered.
 func (s *BasePlSqlParserListener) EnterLabel_declaration(ctx *Label_declarationContext) {}
 

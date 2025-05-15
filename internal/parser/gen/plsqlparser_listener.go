@@ -2701,6 +2701,9 @@ type PlSqlParserListener interface {
 	// EnterSeq_of_statements is called when entering the seq_of_statements production.
 	EnterSeq_of_statements(c *Seq_of_statementsContext)
 
+	// EnterDeclare_block is called when entering the declare_block production.
+	EnterDeclare_block(c *Declare_blockContext)
+
 	// EnterLabel_declaration is called when entering the label_declaration production.
 	EnterLabel_declaration(c *Label_declarationContext)
 
@@ -6297,6 +6300,9 @@ type PlSqlParserListener interface {
 
 	// ExitSeq_of_statements is called when exiting the seq_of_statements production.
 	ExitSeq_of_statements(c *Seq_of_statementsContext)
+
+	// ExitDeclare_block is called when exiting the declare_block production.
+	ExitDeclare_block(c *Declare_blockContext)
 
 	// ExitLabel_declaration is called when exiting the label_declaration production.
 	ExitLabel_declaration(c *Label_declarationContext)
